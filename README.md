@@ -26,7 +26,15 @@ This is an unofficial project. It is not affiliated with or endorsed by Dyson.
 
 ## Quick Start
 
-Requires macOS 14 or later and the Xcode command line tools. Pair the Zone in System Settings > Bluetooth first.
+Requires macOS 14 or later. Pair the Zone in System Settings > Bluetooth first.
+
+### Download
+
+Get the latest signed and notarized DMG from [Releases](https://github.com/nikships/dyson-zone-companion/releases/latest), open it, and drag **Dyson Zone** to Applications. It runs on Apple Silicon and Intel Macs.
+
+### Build from source
+
+Needs the Xcode command line tools.
 
 ```sh
 git clone https://github.com/nikships/dyson-zone-companion.git
@@ -54,6 +62,7 @@ Log file: `~/Library/Logs/DysonZone.log`.
 ```
 dyson-zone-companion/
 ├── Resources/
+│   ├── DysonZone.entitlements
 │   └── Info.plist
 ├── Sources/DysonZone/
 │   ├── Dyson/
@@ -70,7 +79,8 @@ dyson-zone-companion/
 ├── LICENSE
 ├── Package.swift
 ├── README.md
-└── build.sh
+├── build.sh               Local ad-hoc build and install
+└── release.sh             Signed, notarized, stapled DMG
 ```
 
 ## Documentation

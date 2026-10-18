@@ -8,6 +8,8 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS"
 cp "$(swift build -c release --show-bin-path)/DysonZone" "$APP/Contents/MacOS/"
 cp Resources/Info.plist "$APP/Contents/"
+mkdir -p "$APP/Contents/Resources"
+cp Resources/AppIcon.icns "$APP/Contents/Resources/"
 codesign -s - --force "$APP"
 if [ "$1" = "--install" ]; then
     pkill -x DysonZone 2>/dev/null || true

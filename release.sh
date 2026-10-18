@@ -23,6 +23,8 @@ rm -rf "$APP" "$DMG" build/notarize.zip build/dmg
 mkdir -p "$APP/Contents/MacOS"
 cp "$(swift build -c release --arch arm64 --arch x86_64 --show-bin-path)/DysonZone" "$APP/Contents/MacOS/"
 cp Resources/Info.plist "$APP/Contents/"
+mkdir -p "$APP/Contents/Resources"
+cp Resources/AppIcon.icns "$APP/Contents/Resources/"
 
 codesign --force --options runtime --timestamp \
     --entitlements Resources/DysonZone.entitlements --sign "$SIGN_IDENTITY" "$APP"

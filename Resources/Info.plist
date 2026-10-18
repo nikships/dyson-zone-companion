@@ -3,6 +3,7 @@
 <plist version="1.0"><dict>
 <key>CFBundleIdentifier</key><string>dev.nik.DysonZoneCompanion</string>
 <key>CFBundleExecutable</key><string>DysonZone</string>
+<key>CFBundleIconFile</key><string>AppIcon</string>
 <key>CFBundleName</key><string>Dyson Zone</string>
 <key>CFBundleDisplayName</key><string>Dyson Zone</string>
 <key>CFBundlePackageType</key><string>APPL</string>

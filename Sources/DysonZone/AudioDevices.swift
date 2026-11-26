@@ -96,4 +96,64 @@ enum AudioDevices {
     static func builtInInput() -> AudioDevice? {
         all().first { $0.hasInput && !$0.isBluetooth && $0.uid.contains("BuiltIn") }
     }
+
+    static func isAlive(_ id: AudioObjectID) -> Bool {
+        let alive: UInt32 = get(id, address(kAudioDevicePropertyDeviceIsAlive), default: 0) ?? 0
+        return alive != 0
+    }
+
+    static func streamBufferCount(_ id: AudioObjectID, scope: AudioObjectPropertyScope) -> Int {
+        var addr = address(kAudioDevicePropertyStreamConfiguration, scope: scope)
+        var size: UInt32 = 0
+        guard AudioObjectGetPropertyDataSize(id, &addr, 0, nil, &size) == noErr,
+              size >= UInt32(MemoryLayout<AudioBufferList>.size) else { return 0 }
+        let raw = UnsafeMutableRawPointer.allocate(byteCount: Int(size), alignment: MemoryLayout<AudioBufferList>.alignment)
+        defer { raw.deallocate() }
+        guard AudioObjectGetPropertyData(id, &addr, 0, nil, &size, raw) == noErr else { return 0 }
+        return UnsafeMutableAudioBufferListPointer(raw.assumingMemoryBound(to: AudioBufferList.self)).count
+    }
+
+    static func currentProcessObjectID() -> AudioObjectID? {
+        var pid = getpid()
+        var addr = address(kAudioHardwarePropertyTranslatePIDToProcessObject)
+        var processObjectID = AudioObjectID(kAudioObjectUnknown)
+        var size = UInt32(MemoryLayout<AudioObjectID>.size)
+        let status = AudioObjectGetPropertyData(
+            system,
+            &addr,
+            UInt32(MemoryLayout<pid_t>.size),
+            &pid,
+            &size,
+            &processObjectID
+        )
+        guard status == noErr, processObjectID != kAudioObjectUnknown else { return nil }
+        return processObjectID
+    }
+
+    static func isAnyOtherProcessOutputting(to targetDeviceID: AudioObjectID) -> Bool {
+        var listAddr = address(kAudioHardwarePropertyProcessObjectList)
+        var size: UInt32 = 0
+        guard AudioObjectGetPropertyDataSize(system, &listAddr, 0, nil, &size) == noErr, size > 0 else { return false }
+        var processIDs = [AudioObjectID](repeating: 0, count: Int(size) / MemoryLayout<AudioObjectID>.size)
+        guard AudioObjectGetPropertyData(system, &listAddr, 0, nil, &size, &processIDs) == noErr else { return false }
+
+        let myPID = getpid()
+        for procObj in processIDs {
+            let pid: pid_t = get(procObj, address(kAudioProcessPropertyPID), default: 0) ?? 0
+            if pid == myPID || pid == 0 { continue }
+
+            let runningOut: UInt32 = get(procObj, address(kAudioProcessPropertyIsRunningOutput), default: 0) ?? 0
+            guard runningOut != 0 else { continue }
+
+            var devAddr = address(kAudioProcessPropertyDevices, scope: kAudioObjectPropertyScopeOutput)
+            var devSize: UInt32 = 0
+            guard AudioObjectGetPropertyDataSize(procObj, &devAddr, 0, nil, &devSize) == noErr, devSize > 0 else { continue }
+            var outDevs = [AudioObjectID](repeating: 0, count: Int(devSize) / MemoryLayout<AudioObjectID>.size)
+            guard AudioObjectGetPropertyData(procObj, &devAddr, 0, nil, &devSize, &outDevs) == noErr else { continue }
+            if outDevs.contains(targetDeviceID) {
+                return true
+            }
+        }
+        return false
+    }
 }

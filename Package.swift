@@ -9,6 +9,11 @@ let package = Package(
             name: "DysonZone",
             path: "Sources/DysonZone",
             linkerSettings: [.linkedFramework("IOBluetooth"), .linkedFramework("CoreAudio"), .linkedFramework("AudioToolbox")]
+        ),
+        .testTarget(
+            name: "DysonZoneTests",
+            dependencies: ["DysonZone"],
+            path: "Tests/DysonZoneTests"
         )
     ]
 )

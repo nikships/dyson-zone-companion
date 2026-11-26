@@ -16,6 +16,7 @@ Dyson only ships a phone app for the Zone. This app puts the controls in your Ma
 
 - **Noise control:** noise cancelling, conversation, transparency
 - **EQ presets:** Enhanced, Bass boost, Neutral
+- **Software bass boost:** independent Mac-side sub-bass, punch, and cutoff controls with five presets (Warm, Deep, Punch, Heavy, Max), live response curve, and automatic clipping protection that stacks on top of any headphone EQ preset (macOS 14.2+)
 - **Battery:** percent and charging state
 - **Airflow:** off, rest, light, moderate, auto (needs the visor; not tested yet)
 - **Audio:** connect and disconnect, signal strength, volume, and an option that keeps the Mac mic as the input so macOS does not drop the headphones into low-quality call mode
@@ -73,6 +74,8 @@ dyson-zone-companion/
 │   ├── App.swift              Menu bar panel and sign-in window
 │   ├── AppModel.swift
 │   ├── AudioDevices.swift     CoreAudio output, input, volume
+│   ├── BassBoostDSP.swift     Sub-bass shelf, punch EQ, and lookahead limiter
+│   ├── BassBoostEngine.swift  CoreAudio process tap and real-time audio pipeline
 │   └── Headphones.swift       Classic Bluetooth link and audio state
 ├── docs/
 │   └── PROTOCOL.md

@@ -4,10 +4,16 @@ import Foundation
 final class AppModel: ObservableObject {
     let headphones = Headphones()
     let link = ZoneLink()
+    let bass = BassBoost()
     @Published private(set) var credentials: Credentials?
 
     init() {
         credentials = CredentialStore.load()
+        headphones.onAudioTargetChange = { [weak bass] uid, id, isCall in
+            bass?.updateTarget(deviceUID: uid, deviceID: id, isCallMode: isCall)
+        }
+        let inCall: Bool = { if case .callMode = headphones.audioMode { return true } else { return false } }()
+        bass.updateTarget(deviceUID: headphones.outputUID, deviceID: headphones.outputID, isCallMode: inCall)
         link.start(with: credentials)
     }
 

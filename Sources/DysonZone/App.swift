@@ -6,7 +6,7 @@ struct DysonZoneApp: App {
 
     var body: some Scene {
         MenuBarExtra {
-            PanelView(app: app, headphones: app.headphones, link: app.link)
+            PanelView(app: app, headphones: app.headphones, link: app.link, bass: app.bass)
         } label: {
             Image(systemName: app.headphones.isConnected ? "headphones" : "headphones.circle")
         }
@@ -23,6 +23,7 @@ struct PanelView: View {
     @ObservedObject var app: AppModel
     @ObservedObject var headphones: Headphones
     @ObservedObject var link: ZoneLink
+    @ObservedObject var bass: BassBoost
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
@@ -31,6 +32,7 @@ struct PanelView: View {
 
             if headphones.found {
                 controls
+                BassBoostSectionView(bass: bass)
                 if headphones.isConnected { audioBody }
                 Button(action: headphones.toggleConnection) {
                     Text(headphones.busy ? "Working…" : headphones.isConnected ? "Disconnect" : "Connect")
@@ -41,6 +43,7 @@ struct PanelView: View {
             } else {
                 Text("No paired Dyson headphones found. Pair them in System Settings > Bluetooth.")
                     .font(.callout).foregroundStyle(.secondary)
+                BassBoostSectionView(bass: bass)
             }
 
             Divider()
@@ -56,7 +59,7 @@ struct PanelView: View {
                 .keyboardShortcut("q")
         }
         .padding(14)
-        .frame(width: 290)
+        .frame(width: 312)
     }
 
     private var header: some View {
@@ -198,6 +201,204 @@ struct PanelView: View {
             Text(value)
         }
         .font(.callout)
+    }
+}
+
+struct BassBoostSectionView: View {
+    @ObservedObject var bass: BassBoost
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Divider()
+            HStack(spacing: 8) {
+                Text("Software Bass").foregroundStyle(.secondary)
+                Spacer()
+                if bass.isEnabled {
+                    Text(String(format: "+%.1f dB EQ · %@", bass.peakBoost.gainDB, bass.activePresetLabel))
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.primary)
+                }
+                Toggle("Software Bass", isOn: $bass.isEnabled)
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
+                    .labelsHidden()
+            }
+            .font(.callout)
+
+            Picker("Bass preset", selection: Binding(
+                get: { bass.isEnabled ? bass.settings.preset : nil },
+                set: { if let preset = $0 { bass.selectPreset(preset) } }
+            )) {
+                ForEach(BassPreset.allCases) { preset in
+                    Text(preset.label).tag(Optional(preset))
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+
+            if bass.isEnabled {
+                BassResponseCurveView(settings: bass.settings, peak: bass.peakBoost)
+
+                VStack(spacing: 5) {
+                    sliderRow(
+                        title: "Sub-bass",
+                        valueText: String(format: "+%.1f dB", bass.settings.subGainDB),
+                        value: Binding(get: { bass.settings.subGainDB }, set: { bass.setSubGain($0) }),
+                        range: BassSettings.subGainRange
+                    )
+                    sliderRow(
+                        title: "Punch",
+                        valueText: String(format: "+%.1f dB", bass.settings.punchGainDB),
+                        value: Binding(get: { bass.settings.punchGainDB }, set: { bass.setPunchGain($0) }),
+                        range: BassSettings.punchGainRange
+                    )
+                    sliderRow(
+                        title: "Cutoff",
+                        valueText: "\(Int(bass.settings.frequencyHz.rounded())) Hz",
+                        value: Binding(get: { bass.settings.frequencyHz }, set: { bass.setFrequency($0) }),
+                        range: BassSettings.frequencyRange
+                    )
+                }
+
+                Toggle("Prevent clipping", isOn: $bass.preventClipping)
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
+                    .help("Automatically manages headroom and limits peaks so heavy bass boosts stay clean.")
+
+                statusFooter
+            }
+        }
+    }
+
+    private func sliderRow(
+        title: String,
+        valueText: String,
+        value: Binding<Double>,
+        range: ClosedRange<Double>
+    ) -> some View {
+        HStack(spacing: 8) {
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .frame(width: 56, alignment: .leading)
+            Slider(value: value, in: range)
+                .controlSize(.small)
+            Text(valueText)
+                .font(.caption.monospacedDigit())
+                .frame(width: 52, alignment: .trailing)
+        }
+    }
+
+    @ViewBuilder private var statusFooter: some View {
+        switch bass.status {
+        case .permissionNeeded:
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Allow System Audio Recording so Dyson Zone can boost Mac audio.")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                Button("System Audio Recording Settings…", action: bass.openSystemAudioSettings)
+                    .controlSize(.small)
+            }
+        case .failed(let message):
+            Text(message).font(.caption).foregroundStyle(.orange)
+        case .off:
+            EmptyView()
+        default:
+            Text(bass.status.summary)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+}
+
+struct BassResponseCurveView: View {
+    let settings: BassSettings
+    let peak: (gainDB: Double, atHz: Double)
+
+    private static let minHz = 20.0
+    private static let maxHz = 500.0
+    private static let minDB = -4.0
+    private static let maxDB = 22.0
+
+    var body: some View {
+        VStack(spacing: 3) {
+            ZStack(alignment: .topTrailing) {
+                Canvas { context, size in
+                    let zeroY = yPos(forDB: 0, height: size.height)
+                    for db in [0.0, 6.0, 12.0, 18.0] {
+                        let y = yPos(forDB: db, height: size.height)
+                        var grid = Path()
+                        grid.move(to: CGPoint(x: 0, y: y))
+                        grid.addLine(to: CGPoint(x: size.width, y: y))
+                        context.stroke(
+                            grid,
+                            with: .color(.primary.opacity(db == 0 ? 0.18 : 0.07)),
+                            lineWidth: db == 0 ? 0.8 : 0.5
+                        )
+                    }
+
+                    let steps = 72
+                    var line = Path()
+                    var fill = Path()
+                    let logMin = log(Self.minHz)
+                    let logSpan = log(Self.maxHz) - logMin
+
+                    for i in 0...steps {
+                        let t = Double(i) / Double(steps)
+                        let hz = exp(logMin + t * logSpan)
+                        let db = BassBoostDSP.responseDB(atHz: hz, settings: settings)
+                        let pt = CGPoint(x: CGFloat(t) * size.width, y: yPos(forDB: db, height: size.height))
+                        if i == 0 {
+                            line.move(to: pt)
+                            fill.move(to: CGPoint(x: pt.x, y: zeroY))
+                            fill.addLine(to: pt)
+                        } else {
+                            line.addLine(to: pt)
+                            fill.addLine(to: pt)
+                        }
+                    }
+                    fill.addLine(to: CGPoint(x: size.width, y: zeroY))
+                    fill.closeSubpath()
+
+                    context.fill(
+                        fill,
+                        with: .linearGradient(
+                            Gradient(colors: [Color.accentColor.opacity(0.32), Color.accentColor.opacity(0.03)]),
+                            startPoint: .zero,
+                            endPoint: CGPoint(x: 0, y: size.height)
+                        )
+                    )
+                    context.stroke(line, with: .color(.accentColor), lineWidth: 1.7)
+                }
+                .frame(height: 48)
+                .background(RoundedRectangle(cornerRadius: 6).fill(.quaternary.opacity(0.45)))
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+
+                Text("EQ peak @ \(Int(peak.atHz.rounded())) Hz")
+                    .font(.system(size: 9.5, weight: .medium).monospacedDigit())
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 2)
+            }
+
+            HStack {
+                Text("20 Hz")
+                Spacer()
+                Text("60 Hz")
+                Spacer()
+                Text("150 Hz")
+                Spacer()
+                Text("500 Hz")
+            }
+            .font(.system(size: 9).monospacedDigit())
+            .foregroundStyle(.tertiary)
+        }
+    }
+
+    private func yPos(forDB db: Double, height: CGFloat) -> CGFloat {
+        let clamped = min(max(db, Self.minDB), Self.maxDB)
+        let norm = (clamped - Self.minDB) / (Self.maxDB - Self.minDB)
+        return height * CGFloat(1.0 - norm)
     }
 }
 
